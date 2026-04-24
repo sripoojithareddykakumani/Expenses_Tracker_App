@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Expense Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+
+    <button onclick="toggleMode()" style="float:right;">🌙</button>
+
+    <div class="container">
+
+        <h1>💰 Expense Tracker</h1>
+
+        <h3>Total: ₹{{ total }} / Budget: ₹{{ budget }}</h3>
+
+        <!-- Budget Alerts -->
+        {% if percent >= 100 %}
+        <p class="danger">🔴 Budget exceeded!</p>
+        {% elif percent >= 80 %}
+        <p class="warning">⚠️ Budget almost reached!</p>
+        {% endif %}
+
+        <!-- Stats -->
+        <div class="stats">
+            <div>📅 Today: ₹{{ daily }}</div>
+            <div>📊 Week: ₹{{ weekly }}</div>
+            <div>📈 Month: ₹{{ monthly }}</div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+
+            <form method="GET">
+                <input type="date" name="start">
+                <input type="date" name="end">
+                <button>Filter Dates</button>
+            </form>
+
+            <form method="GET">
+                <input name="search" placeholder="Search note...">
+                <button>Search</button>
+            </form>
+
+            <form action="/budget" method="POST">
+                <input name="budget" placeholder="Set Budget">
+                <button type="submit">Set</button>
+            </form>
+
+            <a href="/add" class="add-btn">➕ Add Expense</a>
+            <a href="/export" class="add-btn" style="background:#3b82f6;">📥 Export</a>
+
+        </div>
+
+        <!-- Table -->
+        <table>
+            <tr>
+                <th>ID</th>
+                <th>Amount</th>
+                <th>Category</th>
+                <th>Date</th>
+                <th>Note</th>
+                <th>Action</th>
+            </tr>
+
+            {% for e in expenses %}
+            <tr>
+                <td>{{ e['id'] }}</td>
+                <td>₹{{ e['amount'] }}</td>
+                <td>{{ e['category'] }}</td>
+                <td>{{ e['date'] }}</td>
+                <td>{{ e['note'] }}</td>
+                <td>
+                    <a href="/edit/{{ e['id'] }}">Edit</a>
+                    <a href="/delete/{{ e['id'] }}">Delete</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <!-- TOP SECTION -->
+        <div class="top-section">
+
+            <!-- Monthly Chart -->
+            <div class="monthly-box card">
+                <h3>📊 Monthly Trend</h3>
+                <canvas id="monthlyChart"></canvas>
+            </div>
+
+            <!-- Insights -->
+            <div class="analytics-box card">
+                <h3>📈 Insights</h3>
+
+                <p>💰 Total: ₹{{ total }}</p>
+                <p>📅 Today: ₹{{ daily }}</p>
+                <p>📊 Week: ₹{{ weekly }}</p>
+                <p>📈 Month: ₹{{ monthly }}</p>
+
+                <p>📉 Budget Used: {{ percent|round(1) }}%</p>
+
+                <!-- Progress -->
+                <div class="progress-container">
+                    <div class="progress-bar"
+                         style="width: {{ percent if percent <= 100 else 100 }}%;"></div>
+                </div>
+
+                {% if category_totals %}
+                {% set top = category_totals|dictsort(by='value')|last %}
+                <p>🔥 Top Category: {{ top[0] }}</p>
+                {% endif %}
+
+                {% if last_week is defined %}
+                <p>📊 Last Week: ₹{{ last_week }}</p>
+                {% if weekly > last_week %}
+                <p style="color:red;">↑ Increased</p>
+                {% else %}
+                <p style="color:green;">↓ Decreased</p>
+                {% endif %}
+                {% endif %}
+
+            </div>
+
+        </div>
+
+        <!-- BOTTOM SECTION -->
+        <div class="bottom-section">
+
+            <!-- Pie -->
+            <div class="pie-box card">
+                <h3>📌 Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="pieChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Percent -->
+            <div class="percentage-box card">
+                <h3>Percentages</h3>
+                <ul>
+                    {% for category, amount in category_totals.items() %}
+                    <li>
+                        {{ category }}:
+                        {{ ((amount / total) * 100)|round(1) if total > 0 else 0 }}%
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <!-- Summary -->
+            <div class="summary-box card">
+                <h3>Category Summary</h3>
+                <ul>
+                    {% for category, amount in category_totals.items() %}
+                    <li>{{ category }}: ₹{{ amount }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+        function toggleMode() {
+            document.body.classList.toggle("dark");
+        }
+
+        window.onload = function () {
+
+            const data = {{ category_totals | tojson }};
+
+            new Chart(document.getElementById('pieChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(data),
+                    datasets: [{
+                        data: Object.values(data),
+                        backgroundColor: [
+                            '#FF6384','#36A2EB','#FFCE56','#4CAF50','#9C27B0'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+
+            const monthlyData = {{ monthly_data | tojson }};
+
+            new Chart(document.getElementById('monthlyChart'), {
+                type: 'line',
+                data: {
+                    labels: [
+                        'Jan','Feb','Mar','Apr','May','Jun',
+                        'Jul','Aug','Sep','Oct','Nov','Dec'
+                    ],
+                    datasets: [{
+                        label: 'Expenses',
+                        data: [
+                            monthlyData["01"], monthlyData["02"], monthlyData["03"],
+                            monthlyData["04"], monthlyData["05"], monthlyData["06"],
+                            monthlyData["07"], monthlyData["08"], monthlyData["09"],
+                            monthlyData["10"], monthlyData["11"], monthlyData["12"]
+                        ],
+                        borderColor: '#36A2EB',
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+
+        };
+    </script>
+
+</body>
+
+</html>
